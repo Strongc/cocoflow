@@ -9,9 +9,9 @@ sleep::sleep(uint64 timeout)
 {
 }
 
-static void sleep_cb(uv_timer_t* req, int status)
+static void sleep_cb(uv_timer_t* req)
 {
-	CHECK(status == 0);
+	//CHECK(status == 0);
 	__task_stand(reinterpret_cast<event_task*>(req->data));
 }
 

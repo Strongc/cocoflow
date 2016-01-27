@@ -2,7 +2,6 @@
 #include <time.h>
 
 #include <iostream>
-
 #include "cocoflow.h"
 
 using namespace std;

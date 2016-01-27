@@ -38,7 +38,7 @@ void getaddrinfo::getaddrinfo_cb(uv_getaddrinfo_t* req, int status, struct addri
 		{
 			reinterpret_cast<getaddrinfo*>(req->data)->ret = status;
 			if (reinterpret_cast<getaddrinfo*>(req->data)->errmsg)
-				*reinterpret_cast<getaddrinfo*>(req->data)->errmsg = uv_strerror(uv_last_error(loop()));
+				*reinterpret_cast<getaddrinfo*>(req->data)->errmsg = uv_strerror(status);
 			__task_stand(reinterpret_cast<event_task*>(req->data));
 		}
 	}
@@ -60,7 +60,7 @@ void getaddrinfo::run()
 	{
 		this->ret = status;
 		if (this->errmsg)
-			*this->errmsg = uv_strerror(uv_last_error(loop()));
+			*this->errmsg = uv_strerror(status);
 		free(this->req);
 	}
 }

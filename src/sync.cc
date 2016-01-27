@@ -14,9 +14,9 @@ sync::sync(long id)
 {
 }
 
-static void sync_cb(uv_async_t* async, int status)
+static void sync_cb(uv_async_t* async)
 {
-	CHECK(status == 0);
+	//CHECK(status == 0);
 	__task_stand(reinterpret_cast<event_task*>(async->data));
 }
 

@@ -23,13 +23,13 @@ udp::udp()
 int udp::bind(const struct sockaddr_in& addr)
 {
 	CHECK(this->receiving == udp_receiving_ready);
-	return uv_udp_bind(reinterpret_cast<uv_udp_t*>(this->sock), addr, 0);
+	return uv_udp_bind(reinterpret_cast<uv_udp_t*>(this->sock), &reinterpret_cast<const struct sockaddr &>(addr), 0);
 }
 
 int udp::bind(const struct sockaddr_in6& addr, bool ipv6_only)
 {
 	CHECK(this->receiving == udp_receiving_ready);
-	return uv_udp_bind6(reinterpret_cast<uv_udp_t*>(this->sock), addr, ipv6_only? UV_UDP_IPV6ONLY: 0);
+	return uv_udp_bind(reinterpret_cast<uv_udp_t*>(this->sock), &reinterpret_cast<const sockaddr &>(addr), ipv6_only? UV_UDP_IPV6ONLY: 0);
 }
 
 void udp::ignore_recv(pkg_ignored* ignored)
@@ -104,9 +104,9 @@ void udp::send::run()
 {
 	uv_udp_send_t req;
 	if (this->addr.sin6_family == AF_INET)
-		CHECK(uv_udp_send(&req, reinterpret_cast<uv_udp_t*>(this->handle.sock), &this->buf, 1, *reinterpret_cast<const struct sockaddr_in*>(&this->addr), udp_send_cb) == 0);
+		CHECK(uv_udp_send(&req, reinterpret_cast<uv_udp_t*>(this->handle.sock), &this->buf, 1, reinterpret_cast<const struct sockaddr*>(&this->addr), udp_send_cb) == 0);
 	else //AF_INET6
-		CHECK(uv_udp_send6(&req, reinterpret_cast<uv_udp_t*>(this->handle.sock), &this->buf, 1, this->addr, udp_send_cb) == 0);
+		CHECK(uv_udp_send(&req, reinterpret_cast<uv_udp_t*>(this->handle.sock), &this->buf, 1, reinterpret_cast<const struct sockaddr*>(&this->addr), udp_send_cb) == 0);
 	req.data = this;
 	(void)__task_yield(this);
 }
@@ -122,7 +122,7 @@ udp::send::~send()
 
 /***** udp.recv *****/
 
-uv_buf_t udp::udp_alloc_cb0(uv_handle_t* handle, size_t suggested_size)
+void udp::udp_alloc_cb0(uv_handle_t* handle, size_t suggested_size, uv_buf_t *buf)
 {
 	udp* obj = reinterpret_cast<udp*>(handle->data);
 	CHECK(obj->cur_alloc == NULL);
@@ -131,12 +131,12 @@ uv_buf_t udp::udp_alloc_cb0(uv_handle_t* handle, size_t suggested_size)
 	obj->cur_alloc = *it;
 	obj->recv_queue.erase(it);
 	if (obj->cur_alloc->buf && obj->cur_alloc->len)
-		return uv_buf_init(reinterpret_cast<char*>(obj->cur_alloc->buf), obj->cur_alloc->len);
+		buf = &uv_buf_init(reinterpret_cast<char*>(obj->cur_alloc->buf), obj->cur_alloc->len);
 	else
-		return uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
+		buf = &uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
 }
 
-void udp::udp_recv_cb0(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct sockaddr* addr, unsigned flags)
+void udp::udp_recv_cb0(uv_udp_t* handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr* addr, unsigned flags)
 {
 	udp* obj = reinterpret_cast<udp*>(handle->data);
 	CHECK(obj->cur_alloc != NULL);
@@ -149,9 +149,9 @@ void udp::udp_recv_cb0(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct soc
 	else
 	{
 		if (addr->sa_family == AF_INET)
-			obj->cur_alloc->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<struct sockaddr_in*>(addr));
+			obj->cur_alloc->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<const struct sockaddr_in*>(addr));
 		else if (addr->sa_family == AF_INET6)
-			obj->cur_alloc->addr = *reinterpret_cast<struct sockaddr_in6*>(addr);
+			obj->cur_alloc->addr = *reinterpret_cast<const struct sockaddr_in6*>(addr);
 		else
 			obj->cur_alloc->addr.sin6_family = addr->sa_family;
 		obj->cur_alloc->len = nread;
@@ -231,12 +231,12 @@ udp::recv::~recv()
 
 /***** udp.recv_by_seq *****/
 
-uv_buf_t udp::udp_alloc_cb1(uv_handle_t* handle, size_t suggested_size)
+void udp::udp_alloc_cb1(uv_handle_t* handle, size_t suggested_size, uv_buf_t *buf)
 {
-	return uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
+	buf = & uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
 }
 
-void udp::udp_recv_cb1(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct sockaddr* addr, unsigned flags)
+void udp::udp_recv_cb1(uv_udp_t* handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr* addr, unsigned flags)
 {
 	CHECK(nread >= 0);
 	if (nread == 0)
@@ -250,9 +250,9 @@ void udp::udp_recv_cb1(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct soc
 		if (rbs != NULL)
 		{
 			if (addr->sa_family == AF_INET)
-				rbs->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<struct sockaddr_in*>(addr));
+				rbs->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<const struct sockaddr_in*>(addr));
 			else if (addr->sa_family == AF_INET6)
-				rbs->addr = *reinterpret_cast<struct sockaddr_in6*>(addr);
+				rbs->addr = *reinterpret_cast<const struct sockaddr_in6*>(addr);
 			else
 				rbs->addr.sin6_family = addr->sa_family;
 			if (rbs->buf)
@@ -291,9 +291,9 @@ ____udp_recv_cb_rqne:
 			udp::recv* r = *it;
 			obj->recv_queue.erase(it);
 			if (addr->sa_family == AF_INET)
-				r->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<struct sockaddr_in*>(addr));
+				r->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<const struct sockaddr_in*>(addr));
 			else if (addr->sa_family == AF_INET6)
-				r->addr = *reinterpret_cast<struct sockaddr_in6*>(addr);
+				r->addr = *reinterpret_cast<const struct sockaddr_in6*>(addr);
 			else
 				r->addr.sin6_family = addr->sa_family;
 			if (r->buf)
@@ -356,12 +356,12 @@ udp::recv_by_seq_if::~recv_by_seq_if()
 
 /***** udp.ignore *****/
 
-uv_buf_t udp::udp_alloc_cb2(uv_handle_t* handle, size_t suggested_size)
+void udp::udp_alloc_cb2(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)
 {
-	return uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
+	buf = &uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
 }
 
-void udp::udp_recv_cb2(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct sockaddr* addr, unsigned flags)
+void udp::udp_recv_cb2(uv_udp_t* handle, ssize_t nread, const uv_buf_t *buf, const struct sockaddr* addr, unsigned flags)
 {
 	CHECK(nread >= 0);
 	if (nread == 0)

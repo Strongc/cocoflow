@@ -27,13 +27,13 @@ listening::listening(int backlog)
 int listening::bind(const struct sockaddr_in& addr)
 {
 	CHECK(!this->accepting);
-	return uv_tcp_bind(reinterpret_cast<uv_tcp_t*>(this->sock), addr);
+	return uv_tcp_bind(reinterpret_cast<uv_tcp_t*>(this->sock), &reinterpret_cast<const sockaddr&>(addr),0);
 }
 
 int listening::bind(const struct sockaddr_in6& addr)
 {
 	CHECK(!this->accepting);
-	return uv_tcp_bind6(reinterpret_cast<uv_tcp_t*>(this->sock), addr);
+	return uv_tcp_bind(reinterpret_cast<uv_tcp_t*>(this->sock), &reinterpret_cast<const sockaddr&>(addr),0);
 }
 
 listening::~listening()
@@ -78,7 +78,7 @@ void accept::run()
 	if (!this->handle.accepting)
 	{
 		int ret = uv_listen(reinterpret_cast<uv_stream_t*>(this->handle.sock), this->handle.backlog, listening::tcp_accept_cb);
-		if (ret == -1 && uv_last_error(loop()).code == UV_EADDRINUSE)
+		if (ret == UV_EADDRINUSE)
 		{
 			this->ret = address_in_use;
 			return;
@@ -237,7 +237,7 @@ connected::~connected()
 
 void connected::tcp_connect_cb(uv_connect_t* req, int status)
 {
-	if (!req->data || (status == -1 && uv_last_error(loop()).code == UV_ECANCELED))
+	if (!req->data || (status == UV_ECANCELED))
 		; //Canceled or Canceled by sock close
 	else
 	{
@@ -276,10 +276,10 @@ void connect::run()
 	CHECK(this->handle.broken == false);
 	this->req = malloc(sizeof(uv_connect_t));
 	CHECK(this->req != NULL);
-	if (this->addr.sin6_family == AF_INET)
-		CHECK(uv_tcp_connect(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), *reinterpret_cast<const struct sockaddr_in*>(&this->addr), connected::tcp_connect_cb) == 0);
-	else //AF_INET6
-		CHECK(uv_tcp_connect6(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), this->addr, connected::tcp_connect_cb) == 0);
+	//if (this->addr.sin6_family == AF_INET)
+	CHECK(uv_tcp_connect(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), reinterpret_cast<const struct sockaddr *>(&this->addr), connected::tcp_connect_cb) == 0);
+//	else //AF_INET6
+//		CHECK(uv_tcp_connect6(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), this->addr, connected::tcp_connect_cb) == 0);
 	reinterpret_cast<uv_connect_t*>(this->req)->data = this;
 	(void)__task_yield(this);
 }
@@ -298,7 +298,7 @@ connect::~connect()
 
 void connected::tcp_send_cb(uv_write_t* req, int status)
 {
-	if (status == -1 && uv_last_error(loop()).code == UV_ECANCELED)
+	if (status == UV_ECANCELED)
 		return; //Canceled by sock close
 	if (status == 0)
 		reinterpret_cast<send*>(req->data)->ret = success;
@@ -376,7 +376,7 @@ send::~send()
 
 /***** tcp.recv *****/
 
-uv_buf_t connected::tcp_alloc_cb0(uv_handle_t* handle, size_t suggested_size)
+void connected::tcp_alloc_cb0(uv_handle_t* handle, size_t suggested_size, uv_buf_t *buf)
 {
 	connected* obj = reinterpret_cast<connected*>(handle->data);
 	CHECK(obj->cur_alloc0 == NULL);
@@ -385,10 +385,10 @@ uv_buf_t connected::tcp_alloc_cb0(uv_handle_t* handle, size_t suggested_size)
 	obj->cur_alloc0 = *it;
 	obj->recv_queue0.erase(it);
 	CHECK(obj->cur_alloc0->buf != NULL && obj->cur_alloc0->len > 0);
-	return uv_buf_init(reinterpret_cast<char*>(obj->cur_alloc0->buf), static_cast<unsigned int>(obj->cur_alloc0->len));
+	buf = & uv_buf_init(reinterpret_cast<char*>(obj->cur_alloc0->buf), static_cast<unsigned int>(obj->cur_alloc0->len));
 }
 
-void connected::tcp_recv_cb0(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
+void connected::tcp_recv_cb0(uv_stream_t* handle, ssize_t nread, const uv_buf_t *buf)
 {
 	connected* obj = reinterpret_cast<connected*>(handle->data);
 	CHECK(obj->cur_alloc0 != NULL);
@@ -486,7 +486,7 @@ static const void *bufbuf(const void *buf1, size_t len1, const void *buf2, size_
 	return ret;
 }
 
-uv_buf_t connected::tcp_alloc_cb1(uv_handle_t* handle, size_t suggested_size)
+void connected::tcp_alloc_cb1(uv_handle_t* handle, size_t suggested_size, uv_buf_t *buf)
 {
 	connected* obj = reinterpret_cast<connected*>(handle->data);
 	CHECK(obj->cur_alloc1 == NULL);
@@ -497,7 +497,7 @@ uv_buf_t connected::tcp_alloc_cb1(uv_handle_t* handle, size_t suggested_size)
 	if (!obj->cur_alloc1->pattern)
 	{
 		CHECK(obj->len1 == 0);
-		return uv_buf_init(reinterpret_cast<char*>(obj->cur_alloc1->cur), static_cast<unsigned int>(obj->cur_alloc1->left));
+		buf = & uv_buf_init(reinterpret_cast<char*>(obj->cur_alloc1->cur), static_cast<unsigned int>(obj->cur_alloc1->left));
 	}
 	else
 	{
@@ -507,11 +507,11 @@ uv_buf_t connected::tcp_alloc_cb1(uv_handle_t* handle, size_t suggested_size)
 			obj->buf1 = reinterpret_cast<char*>(malloc(obj->size1));
 			CHECK(obj->buf1 != NULL);
 		}
-		return uv_buf_init(reinterpret_cast<char*>(obj->buf1 + obj->len1), static_cast<unsigned int>(obj->size1 - obj->len1));
+		buf = & uv_buf_init(reinterpret_cast<char*>(obj->buf1 + obj->len1), static_cast<unsigned int>(obj->size1 - obj->len1));
 	}
 }
 
-void connected::tcp_recv_cb1(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
+void connected::tcp_recv_cb1(uv_stream_t* handle, ssize_t nread, const uv_buf_t *buf)
 {
 	connected* obj = reinterpret_cast<connected*>(handle->data);
 	CHECK(obj->cur_alloc1 != NULL);
@@ -573,9 +573,9 @@ void connected::tcp_recv_cb1(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
 		connected::check_remaining(reinterpret_cast<uv_handle_t*>(handle));
 }
 
-void connected::tcp_fallback_cb1(uv_async_t* async, int status)
+void connected::tcp_fallback_cb1(uv_async_t* async)
 {
-	CHECK(status == 0);
+	//CHECK(status == 0);
 	connected::check_remaining(reinterpret_cast<uv_handle_t*>(async));
 }
 
@@ -725,16 +725,16 @@ void connected::check_remaining(uv_handle_t* handle)
 
 /***** tcp.recv_by_seq *****/
 
-uv_buf_t connected::tcp_alloc_cb2(uv_handle_t* handle, size_t suggested_size)
+void connected::tcp_alloc_cb2(uv_handle_t* handle, size_t suggested_size, uv_buf_t *buf)
 {
 	connected* obj = reinterpret_cast<connected*>(handle->data);
 	if (obj->len2 < obj->header_len)
-		return uv_buf_init(obj->buf2 + obj->len2, obj->header_len - obj->len2);
+		buf = &uv_buf_init(obj->buf2 + obj->len2, obj->header_len - obj->len2);
 	else
-		return uv_buf_init(obj->buf2 + obj->len2, obj->packet_len - obj->len2);
+		buf = &uv_buf_init(obj->buf2 + obj->len2, obj->packet_len - obj->len2);
 }
 
-void connected::tcp_recv_cb2(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
+void connected::tcp_recv_cb2(uv_stream_t* handle, ssize_t nread, const uv_buf_t *buf)
 {
 	if (nread == 0)
 		return;

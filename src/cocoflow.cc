@@ -196,7 +196,7 @@ void __task_runtime(uint32 _unique_id)
 	}
 }
 
-int __await(event_task* target)
+int __await0(event_task* target)
 {
 	if (ccf_unlikely(!global_current_task))
 		FATAL_ERROR("Call await() must be in a task");

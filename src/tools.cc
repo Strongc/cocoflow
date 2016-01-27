@@ -29,12 +29,16 @@ struct sockaddr_in sockaddr_in_outof_sockaddr_in6(const struct sockaddr_in6& add
 
 struct sockaddr_in ip_to_addr(const char* ipv4, int port)
 {
-	return uv_ip4_addr(ipv4, port);
+	sockaddr_in addr;
+	uv_ip4_addr(ipv4, port, &addr);
+	return addr;
 }
 
 struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port)
 {
-	return uv_ip6_addr(ipv6, port);
+	sockaddr_in6 addr;
+	uv_ip6_addr(ipv6, port, &addr);
+	return addr;
 }
 
 std::string ip_to_str(const struct sockaddr* addr)

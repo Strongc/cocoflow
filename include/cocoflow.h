@@ -16,6 +16,7 @@
 		#define _SSIZE_T_
 		#define _SSIZE_T_DEFINED
 	#endif
+#pragma comment(lib, "Userenv.lib")
 #else
 # include <netinet/in.h>
 # include <netdb.h>
@@ -124,7 +125,7 @@ private:
 	static uint32* free_list_front;
 	static uint32* free_list_end;
 	static bool initialized;
-	friend int __await(event_task*);
+	friend int __await0(event_task*);
 	friend int __start(event_task*);
 	friend void __cocoflow(event_task*);
 	friend void __task_runtime(uint32);
@@ -364,12 +365,12 @@ private:
 	std::list<recv*> recv_queue;
 	static char routing_buf[65536];
 	static size_t routing_len;
-	static uv_buf_t udp_alloc_cb0(uv_handle_t*, size_t);
-	static void udp_recv_cb0(uv_udp_t*, ssize_t, uv_buf_t, struct sockaddr*, unsigned);
-	static uv_buf_t udp_alloc_cb1(uv_handle_t*, size_t);
-	static void udp_recv_cb1(uv_udp_t*, ssize_t, uv_buf_t, struct sockaddr*, unsigned);
-	static uv_buf_t udp_alloc_cb2(uv_handle_t*, size_t);
-	static void udp_recv_cb2(uv_udp_t*, ssize_t, uv_buf_t, struct sockaddr*, unsigned);
+	static void udp_alloc_cb0(uv_handle_t*, size_t,uv_buf_t *buf);
+	static void udp_recv_cb0(uv_udp_t*, ssize_t, const uv_buf_t*, const struct sockaddr*, unsigned);
+	static void udp_alloc_cb1(uv_handle_t*, size_t, uv_buf_t *);
+	static void udp_recv_cb1(uv_udp_t*, ssize_t, const uv_buf_t*, const struct sockaddr*, unsigned);
+	static void udp_alloc_cb2(uv_handle_t*, size_t, uv_buf_t* buf);
+	static void udp_recv_cb2(uv_udp_t*, ssize_t, const uv_buf_t*, const struct sockaddr*, unsigned);
 };
 
 namespace tcp {
@@ -467,13 +468,13 @@ private:
 	void* async_cancel1;
 	static void tcp_connect_cb(uv_connect_t*, int);
 	static void tcp_send_cb(uv_write_t*, int);
-	static uv_buf_t tcp_alloc_cb0(uv_handle_t*, size_t);
-	static void tcp_recv_cb0(uv_stream_t*, ssize_t, uv_buf_t);
-	static uv_buf_t tcp_alloc_cb1(uv_handle_t*, size_t);
-	static void tcp_recv_cb1(uv_stream_t*, ssize_t, uv_buf_t);
-	static uv_buf_t tcp_alloc_cb2(uv_handle_t*, size_t);
-	static void tcp_recv_cb2(uv_stream_t*, ssize_t, uv_buf_t);
-	static void tcp_fallback_cb1(uv_async_t*, int);
+	static void tcp_alloc_cb0(uv_handle_t*, size_t, uv_buf_t *);
+	static void tcp_recv_cb0(uv_stream_t*, ssize_t, const uv_buf_t *);
+	static void tcp_alloc_cb1(uv_handle_t*, size_t, uv_buf_t *);
+	static void tcp_recv_cb1(uv_stream_t*, ssize_t, const uv_buf_t*);
+	static void tcp_alloc_cb2(uv_handle_t*, size_t, uv_buf_t *);
+	static void tcp_recv_cb2(uv_stream_t*, ssize_t, const uv_buf_t *);
+	static void tcp_fallback_cb1(uv_async_t*);
 	static void check_remaining(uv_handle_t*);
 	static void break_all_recv(uv_handle_t*, int);
 	static bool break_all_recv_by_seq(void*, void*);
@@ -643,7 +644,7 @@ private:
 };
 
 struct sockaddr_in ip_to_addr(const char* ipv4, int port);
-struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port);
+struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port,  sockaddr_in *addr);
 std::string ip_to_str(const struct sockaddr* addr);
 std::string ip_to_str(const struct sockaddr_in& addr);
 std::string ip_to_str(const struct sockaddr_in6& addr);
@@ -712,7 +713,7 @@ uint32* _task_tpl::free_list_end = NULL;
 template<uint32 UserPages, uint32 ProtectPages>
 bool _task_tpl::initialized = false;
 
-int __await(event_task*);
+int __await0(event_task*);
 
 template<uint32 UserPages, uint32 ProtectPages>
 int await(_task_tpl& target)
@@ -722,7 +723,7 @@ int await(_task_tpl& target)
 		*(--_task_tpl::free_list_front) = target._unique_id;
 		target._unique_id = EVENT_LOOP_ID;
 	}
-	return __await(reinterpret_cast<event_task*>(&target));
+	return __await0(reinterpret_cast<event_task*>(&target));
 }
 
 int __start(event_task*);
